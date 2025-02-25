@@ -1,9 +1,11 @@
 import tensorflow as tf
+from tensorflow.keras.layers import Flatten
+tf.compat.v1.disable_eager_execution()
 
 def conv(input, kernel, biases, k_h, k_w, c_o, s_h, s_w,  padding="VALID", group=1):
     '''From https://github.com/ethereon/caffe-tensorflow
     '''
-    convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding)
+    convolve = lambda i, k: tf.nn.conv2d(i, filters=k, strides=[1, s_h, s_w, 1], padding=padding)
 
     if group==1:
         conv = convolve(input, kernel)
@@ -35,7 +37,7 @@ def vfn_rl(x, variable_dict, global_feature=None, h=None, c=None, embedding_dim=
     ## maxpool1
     #  max_pool(3, 3, 2, 2, padding='VALID', name='pool1')
     k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
-    maxpool1 = tf.nn.max_pool(lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    maxpool1 = tf.nn.max_pool2d(input=lrn1, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
 
     ######################## Layer 2 ################################
     ## conv2
@@ -56,7 +58,7 @@ def vfn_rl(x, variable_dict, global_feature=None, h=None, c=None, embedding_dim=
     ## maxpool2
     #  max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
     k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
-    maxpool2 = tf.nn.max_pool(lrn2, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+    maxpool2 = tf.nn.max_pool2d(input=lrn2, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
 
     ######################## Layer 3 ################################
     ## conv3
@@ -86,15 +88,15 @@ def vfn_rl(x, variable_dict, global_feature=None, h=None, c=None, embedding_dim=
     conv5 = tf.nn.relu(conv5_in)
     ## maxpool5
     #  max_pool(3, 3, 2, 2, padding='VALID', name='pool5')
-    with tf.variable_scope("conv5"):
+    with tf.compat.v1.variable_scope("conv5"):
         k_h = 3; k_w = 3; s_h = 2; s_w = 2; padding = 'VALID'
-        maxpool5 = tf.nn.max_pool(conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
-        bn5 = tf.contrib.layers.flatten(maxpool5)
+        maxpool5 = tf.nn.max_pool2d(input=conv5, ksize=[1, k_h, k_w, 1], strides=[1, s_h, s_w, 1], padding=padding)
+        bn5 = Flatten()(maxpool5)
 
     ####################### Layer 6 ################################
     fc6W =  variable_dict["fc6w"]
     fc6b = variable_dict["fc6b"]
-    fc6 = tf.nn.relu_layer(bn5, fc6W, fc6b)
+    fc6 = tf.compat.v1.nn.relu_layer(bn5, fc6W, fc6b)
 
     if global_feature is None:
         return fc6
@@ -104,17 +106,17 @@ def vfn_rl(x, variable_dict, global_feature=None, h=None, c=None, embedding_dim=
     ############## Layer 1 #################
     fc1W = variable_dict['fc1.weight'].T
     fc1b = variable_dict['fc1.bias']
-    fc1 = tf.nn.relu_layer(x_rl, fc1W, fc1b)
+    fc1 = tf.compat.v1.nn.relu_layer(x_rl, fc1W, fc1b)
 
     ############## Layer 2 #################
     fc2W = variable_dict['fc2.weight'].T
     fc2b = variable_dict['fc2.bias']
-    fc2 = tf.nn.relu_layer(fc1, fc2W, fc2b)
+    fc2 = tf.compat.v1.nn.relu_layer(fc1, fc2W, fc2b)
 
     ############## Layer 3 #################
     fc3W = variable_dict['fc3.weight'].T
     fc3b = variable_dict['fc3.bias']
-    fc3 = tf.nn.relu_layer(fc2, fc3W, fc3b)
+    fc3 = tf.compat.v1.nn.relu_layer(fc2, fc3W, fc3b)
 
     ############## LSTM #################
     W = tf.matmul(fc3, variable_dict['lstm.weight_ih'].T) + variable_dict['lstm.bias_ih'] +\
@@ -127,6 +129,6 @@ def vfn_rl(x, variable_dict, global_feature=None, h=None, c=None, embedding_dim=
     ############## Action #################
     action1w = variable_dict['action_fc.weight'].T
     action1b = variable_dict['action_fc.bias']
-    action = tf.multinomial(tf.matmul(h, action1w) + action1b, 1)
+    action = tf.random.categorical(tf.matmul(h, action1w) + action1b, 1)
 
     return action, h, c

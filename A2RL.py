@@ -3,8 +3,10 @@ import pickle
 import argparse
 import numpy as np
 import tensorflow as tf
+tf.compat.v1.disable_eager_execution()
 
 import skimage.io as io
+from skimage import img_as_ubyte
 
 import network
 from actions import command2action, generate_bbox, crop_input
@@ -14,14 +16,14 @@ global_dtype = tf.float32
 with open('vfn_rl.pkl', 'rb') as f:
     var_dict = pickle.load(f)
 
-image_placeholder = tf.placeholder(dtype=global_dtype, shape=[None,227,227,3])
+image_placeholder = tf.compat.v1.placeholder(dtype=global_dtype, shape=[None,227,227,3])
 global_feature_placeholder = network.vfn_rl(image_placeholder, var_dict)
 
-h_placeholder = tf.placeholder(dtype=global_dtype, shape=[None,1024])
-c_placeholder = tf.placeholder(dtype=global_dtype, shape=[None,1024])
+h_placeholder = tf.compat.v1.placeholder(dtype=global_dtype, shape=[None,1024])
+c_placeholder = tf.compat.v1.placeholder(dtype=global_dtype, shape=[None,1024])
 action, h, c = network.vfn_rl(image_placeholder, var_dict, global_feature=global_feature_placeholder,
                                                            h=h_placeholder, c=c_placeholder)
-sess = tf.Session()
+sess = tf.compat.v1.Session()
 
 def auto_cropping(origin_image):
     batch_size = len(origin_image)
@@ -43,7 +45,7 @@ def auto_cropping(origin_image):
         bbox = generate_bbox(origin_image, ratios)
         if np.sum(terminals) == batch_size:
             return bbox
-        
+
         img = crop_input(origin_image, bbox)
 
 if __name__ == '__main__':
@@ -55,5 +57,7 @@ if __name__ == '__main__':
     im = io.imread(args.image_path).astype(np.float32) / 255
     xmin, ymin, xmax, ymax = auto_cropping([im - 0.5])[0]
 
-    io.imsave(args.save_path, im[ymin:ymax, xmin:xmax])
+    cropped_img = im[ymin:ymax, xmin:xmax]
+    cropped_img = img_as_ubyte(cropped_img)
 
+    io.imsave(args.save_path, cropped_img)
